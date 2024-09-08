@@ -1,15 +1,32 @@
-FROM gradle:4.7.0-jdk8-alpine AS build
-COPY --chown=gradle:gradle . /home/gradle/src
-WORKDIR /home/gradle/src
-RUN gradle build --no-daemon 
+# Используем официальный образ Go версии 1.23
+FROM golang:1.23 AS builder
 
-FROM openjdk:8-jre-slim
+# Создаем рабочую директорию
+WORKDIR /app
 
+# Копируем go.mod и go.sum файлы
+COPY go-tender-app/go.mod go-tender-app/go.sum ./
+
+# Загружаем зависимости
+RUN go mod download
+
+# Копируем все остальные файлы проекта
+COPY go-tender-app ./
+
+# Собираем проект
+RUN go build -o main .
+
+# Используем более легкий базовый образ для выполнения
+FROM debian:bullseye-slim
+
+# Создаем рабочую директорию
+WORKDIR /app
+
+# Копируем собранный бинарный файл из стадии сборки
+COPY --from=builder /app/main .
+
+# Открываем порт, на котором будет работать приложение
 EXPOSE 8080
 
-RUN mkdir /app
-
-COPY --from=build /home/gradle/src/build/libs/*.jar /app/spring-boot-application.jar
-
-ENTRYPOINT ["java", "-XX:+UnlockExperimentalVMOptions", "-XX:+UseCGroupMemoryLimitForHeap", "-Djava.security.egd=file:/dev/./urandom","-jar","/app/spring-boot-application.jar"]
-
+# Команда для запуска приложения
+CMD ["./main"]
